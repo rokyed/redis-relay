@@ -1,0 +1,23 @@
+{
+  "name": "redis-relay",
+  "version": "1.0.0",
+  "description": "Relay for redis, with short cache and logging",
+  "homepage": "https://github.com/rokyed/redis-relay#readme",
+  "bugs": {
+    "url": "https://github.com/rokyed/redis-relay/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rokyed/redis-relay.git"
+  },
+  "license": "MIT",
+  "author": "Andrei Bazavan",
+  "type": "commonjs",
+  "main": "relay.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "redis": "^5.0.0"
+  }
+}

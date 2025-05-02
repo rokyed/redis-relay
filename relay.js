@@ -1,13 +1,21 @@
 const net = require('net');
 const config = require('./config.json');
 const cache = new Map();
-const CACHE_LENGTH = 600000;
 const Parser = require('redis-parser');
 
 let verbose = false;
+let extraVerbose = false;
+let showCalls = false;
+let cacheLength = 600000;
 
 function clog(...args) {
   if (verbose) {
+    console.log(...args);
+  }
+}
+
+function ccall(...args) {
+  if (showCalls) {
     console.log(...args);
   }
 }
@@ -53,7 +61,7 @@ function createKeyCache(clientName, key) {
 function getCacheChunks(clientName, key) {
   let item = cache.get(`${clientName}:${key}`);
   if (!item) return null;
-  if (Date.now() - item.time > CACHE_LENGTH) {
+  if (Date.now() - item.time > cacheLength) {
     cache.delete(key);
     return null;
   }
@@ -63,7 +71,7 @@ function getCacheChunks(clientName, key) {
 
 function clearOldCache() {
   for (const [key, item] of cache) {
-    if (Date.now() - item.time > CACHE_LENGTH) {
+    if (Date.now() - item.time > cacheLength) {
       cache.delete(key);
     }
   }
@@ -87,9 +95,11 @@ function createServer(clientObj) {
             client.write(chunk);
           }
           returnedChunks = true;
-          return;
         }
       }
+
+      ccall(`${returnedChunks ? 'hit' : 'miss'} -> C:${clientObj.counter} -> ${clientName} -> ${key}`);
+
 
       if (!returnedChunks) {
         const redisSocket = net.createConnection({ host: redisHost, port: redisPort }, () => {
@@ -130,7 +140,7 @@ function createServer(clientObj) {
   });
 
   clientObj.clientInstance.listen(relayPort, () => {
-    clog(`${clientName}: Redis relay with cache on port ${relayPort}, target ${redisHost}:${redisPort}`);
+    console.log(`${clientName}: Redis relay with cache on port ${relayPort}, target ${redisHost}:${redisPort}`);
   });
 }
 
@@ -150,21 +160,36 @@ function voiceTotalCalls() {
   return total;
 }
 
+function voiceExtraTotalCalls() {
+  if (extraVerbose) {
+    for (const client of config) {
+      console.log(`${client.name} -> ${client.counter}`);
+    }
+  }
+}
+
 setInterval(() => {
-  clog(voiceTotalCalls());
+  if (!verbose) return;
+  if (extraVerbose) {
+    voiceExtraTotalCalls();
+  } else {
+    clog(voiceTotalCalls());
+  }
 }, 1000);
 
 
 function printHelp() {
   console.log('commands:');
-  console.log('  cache -> clear cache');
-  console.log('  exit -> exit program');
-  console.log('  counter -> reset counter');
-  console.log('  stats -> show total counter');
-  console.log('  extra -> show counter per client');
-  console.log('  verbose -> show verbose log');
+  console.log('  set cache <seconds> -> set cache length in seconds', `(current: ${cacheLength/1000} seconds)`);
+  console.log('  reset cache -> clear cache');
+  console.log('  reset counter -> reset counter');
+  console.log('  stats -> show total tally of calls ');
+  console.log('  extra -> show total tally of calls per client');
+  console.log('  calls -> show calls per client', `(current: ${showCalls})`);
+  console.log('  verbose -> show verbose log', `(current: ${verbose})`);
   console.log('  clear -> clear screen');
-  console.log('  help -> show this help');
+  console.log('  help / h -> show this help');
+  console.log('  exit -> exit program');
 
   return;
 }
@@ -178,39 +203,67 @@ process.stdin.on('data', (data) => {
 
   let key = bufferToHashString(data);
 
-  if (key === 'help') {
-    console.log('Commands: cache, exit, counter, stats, verbose, clear');
+  if (key === 'help' || key === 'h') {
+    printHelp();
   }
 
   if (key === 'clear') {
     process.stdout.write('\x1B[2J\x1B[0f');
+    printHelp();
   }
 
   if (key === 'verbose') {
     verbose = !verbose;
+    console.log('verbose:', verbose);
   }
 
-  if (key === 'cache') {
+  if (key === 'reset cache') {
     cache.clear();
+    console.log('cache cleared');
   }
 
   if (key === 'stats') {
-    console.log(voiceTotalCalls());
+    if (extraVerbose) {
+      voiceExtraTotalCalls();
+    } else {
+      console.log(voiceTotalCalls());
+    }
   }
 
   if (key === 'exit') {
     process.exit();    
   } 
 
-  if (key === 'counter') {
+  if (key === 'reset counter') {
     for (const client of config) {
       client.counter = 0;
     }
+    console.log('counters reset'); 
   }
 
   if (key === 'extra') {
-    for (const client of config) {
-      console.log(`${client.name}: ${client.counter}`);
+    extraVerbose = !extraVerbose;
+    console.log('extra verbose:', extraVerbose);
+  }
+
+  if (key === 'calls') {
+    showCalls = !showCalls;
+    console.log('show calls:', showCalls);
+  }
+
+  if (key.indexOf('set cache') > -1) {
+    try {
+      const seconds = parseInt(key.split(' ')[2]);
+
+      if (isNaN(seconds)) {
+        console.log('invalid cache length');
+        return;
+      }
+
+      cacheLength = seconds * 1000;
+      console.log('cache length set to', seconds, 'seconds');
+    } catch (err) {
+      console.log('invalid cache length');
     }
   }
 

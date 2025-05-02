@@ -1,0 +1,14 @@
+[
+  {
+    "name": "test1",
+    "port": "6500",
+    "targetIp": "localhost",
+    "targetPort": "6379"
+  },
+  {
+    "name": "test2",
+    "port": "6600",
+    "targetIp": "localhost",
+    "targetPort": "6379"
+  }
+]

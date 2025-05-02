@@ -137,9 +137,27 @@ setInterval(() => {
 }, 1000);
 
 
+function printHelp() {
+  console.log('commands:');
+  console.log('  cache -> clear cache');
+  console.log('  exit -> exit program');
+  console.log('  counter -> reset counter');
+  console.log('  stats -> show total counter');
+  console.log('  extra -> show counter per client');
+  console.log('  verbose -> show verbose log');
+  console.log('  clear -> clear screen');
+  console.log('  help -> show this help');
+
+  return;
+}
+
+printHelp();
+
 /// listen to keyboard and clear cache
 
 process.stdin.on('data', (data) => {
+  //auto complete
+
   let key = bufferToHashString(data);
 
   if (key === 'help') {
@@ -169,6 +187,12 @@ process.stdin.on('data', (data) => {
   if (key === 'counter') {
     for (const client of config) {
       client.counter = 0;
+    }
+  }
+
+  if (key === 'extra') {
+    for (const client of config) {
+      console.log(`${client.name}: ${client.counter}`);
     }
   }
 

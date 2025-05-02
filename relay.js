@@ -3,6 +3,14 @@ const config = require('./config.json');
 const cache = new Map();
 const CACHE_LENGTH = 600000;
 
+let verbose = false;
+
+function clog(...args) {
+  if (verbose) {
+    console.log(...args);
+  }
+}
+
 function isGet(buffer) {
   const lines = buffer.toString().split('\r\n');
   if (lines[2]?.toUpperCase().indexOf('GET') > -1) {
@@ -23,7 +31,7 @@ function buildBulkString(value) {
 function pushIntoCache(clientName, key, value) {
   let item = cache.get(`${clientName}:${key}`);
 
-  console.log('storing value', value.length, 'into cache', clientName, key);
+  clog('storing value', value.length, 'into cache', clientName, key);
 
   if (!item) {
     createKeyCache(clientName, key);
@@ -48,7 +56,7 @@ function getCacheChunks(clientName, key) {
     cache.delete(key);
     return null;
   }
-  console.log('getting value from cache', clientName, key);
+  clog('getting value from cache', clientName, key);
   return item.chunks;
 }
 
@@ -104,7 +112,7 @@ function createServer(clientObj) {
   });
 
   clientObj.clientInstance.listen(relayPort, () => {
-    console.log(`${clientName}: Redis relay with cache on port ${relayPort}, target ${redisHost}:${redisPort}`);
+    clog(`${clientName}: Redis relay with cache on port ${relayPort}, target ${redisHost}:${redisPort}`);
   });
 }
 
@@ -125,8 +133,8 @@ function voiceTotalCalls() {
 }
 
 setInterval(() => {
-  console.log(voiceTotalCalls());
-}, 5000);
+  clog(voiceTotalCalls());
+}, 1000);
 
 
 /// listen to keyboard and clear cache
@@ -135,11 +143,23 @@ process.stdin.on('data', (data) => {
   let key = bufferToHashString(data);
 
   if (key === 'help') {
-    console.log('Commands: cache, exit, counter');
+    console.log('Commands: cache, exit, counter, stats, verbose, clear');
+  }
+
+  if (key === 'clear') {
+    process.stdout.write('\x1B[2J\x1B[0f');
+  }
+
+  if (key === 'verbose') {
+    verbose = !verbose;
   }
 
   if (key === 'cache') {
     cache.clear();
+  }
+
+  if (key === 'stats') {
+    console.log(voiceTotalCalls());
   }
 
   if (key === 'exit') {

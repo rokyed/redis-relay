@@ -12,7 +12,7 @@ function isGet(buffer) {
 }
 
 function bufferToHashString(data) {
-  return data.toString().split('\r\n').map(line => line.split(':')[1]).join(':');
+  return data.toString().replace(/\r|\n/g, '');
 }
 
 function buildBulkString(value) {
@@ -22,11 +22,14 @@ function buildBulkString(value) {
 
 function pushIntoCache(clientName, key, value) {
   let item = cache.get(`${clientName}:${key}`);
+
+  console.log('storing value', value.length, 'into cache', clientName, key);
+
   if (!item) {
     createKeyCache(clientName, key);
     item = cache.get(`${clientName}:${key}`);
+    item.time = Date.now();
   }
-
 
   item.chunks.push(value);
 }
@@ -39,13 +42,14 @@ function createKeyCache(clientName, key) {
 }
 
 function getCacheChunks(clientName, key) {
-  let item = cache.get(key);
+  let item = cache.get(`${clientName}:${key}`);
   if (!item) return null;
   if (Date.now() - item.time > CACHE_LENGTH) {
     cache.delete(key);
     return null;
   }
-  return item.val;
+  console.log('getting value from cache', clientName, key);
+  return item.chunks;
 }
 
 function clearOldCache() {
@@ -66,31 +70,34 @@ function createServer(clientObj) {
     client.on('data', async (data) => {
       clientObj.counter++;
       let key = bufferToHashString(data);
+      let returnedChunks = false;
       if (isGet(data)) {
         let chunks = getCacheChunks(clientName, key);
         if (chunks) {
-          console.log('Chunks:', chunks.length);
           for (const chunk of chunks) {
             client.write(chunk);
           }
+          returnedChunks = true;
           return;
         }
       }
 
-      const redisSocket = net.createConnection({ host: redisHost, port: redisPort }, () => {
-        redisSocket.write(data);
-      });
+      if (!returnedChunks) {
+        const redisSocket = net.createConnection({ host: redisHost, port: redisPort }, () => {
+          redisSocket.write(data);
+        });
 
-      redisSocket.on('data', (chunk) => {
-        pushIntoCache(clientName, key, chunk);
-        client.write(chunk)
-      });
-      redisSocket.on('error', err => {
-        console.error('Redis error:', err.message);
-        client.write(`-Redis error\r\n`);
-      });
-      redisSocket.on('close', () => {
-      });
+        redisSocket.on('data', (chunk) => {
+          pushIntoCache(clientName, key, chunk);
+          client.write(chunk)
+        });
+        redisSocket.on('error', err => {
+          console.error('Redis error:', err.message);
+          client.write(`-Redis error\r\n`);
+        });
+        redisSocket.on('close', () => {
+        });
+      }
     });
 
     client.on('error', err => console.error('Client error:', err.message));
@@ -119,6 +126,30 @@ function voiceTotalCalls() {
 
 setInterval(() => {
   console.log(voiceTotalCalls());
-}, 1000);
+}, 5000);
 
 
+/// listen to keyboard and clear cache
+
+process.stdin.on('data', (data) => {
+  let key = bufferToHashString(data);
+
+  if (key === 'help') {
+    console.log('Commands: cache, exit, counter');
+  }
+
+  if (key === 'cache') {
+    cache.clear();
+  }
+
+  if (key === 'exit') {
+    process.exit();    
+  } 
+
+  if (key === 'counter') {
+    for (const client of config) {
+      client.counter = 0;
+    }
+  }
+
+});

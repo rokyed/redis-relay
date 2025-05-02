@@ -2,6 +2,7 @@ const net = require('net');
 const config = require('./config.json');
 const cache = new Map();
 const CACHE_LENGTH = 600000;
+const Parser = require('redis-parser');
 
 let verbose = false;
 
@@ -94,16 +95,33 @@ function createServer(clientObj) {
         const redisSocket = net.createConnection({ host: redisHost, port: redisPort }, () => {
           redisSocket.write(data);
         });
+        let bufferChunks = [];
+
+        const parser = new Parser({
+          returnBuffers: true,
+          returnReply(reply) {
+            const fullBuffer = Buffer.concat(bufferChunks);
+            pushIntoCache(clientName, key, fullBuffer);
+            redisSocket.end(); // 👈 Close connection here
+            bufferChunks = [];
+          },
+          returnError(err) {
+            console.error('Redis parse error:', err);
+            redisSocket.end();
+          }
+        });
 
         redisSocket.on('data', (chunk) => {
           pushIntoCache(clientName, key, chunk);
           client.write(chunk)
+          parser.execute(chunk);
         });
         redisSocket.on('error', err => {
           console.error('Redis error:', err.message);
           client.write(`-Redis error\r\n`);
         });
         redisSocket.on('close', () => {
+          clog('redis socket closed', clientName);
         });
       }
     });
